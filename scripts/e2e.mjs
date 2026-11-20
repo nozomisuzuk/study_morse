@@ -24,6 +24,14 @@ const REVERSE = Object.fromEntries(Object.entries(MORSE).map(([k, v]) => [v, k])
 function initScript({ reverse, unit }) {
   window.__decoded = [];
   window.__starts = 0;
+  window.__ctxs = [];
+  const Ctx = window.AudioContext;
+  window.AudioContext = class extends Ctx {
+    constructor(...a) {
+      super(...a);
+      window.__ctxs.push(this);
+    }
+  };
   const decode = (data, sr) => {
     const win = Math.max(1, Math.round(sr * 0.002));
     const blocks = Math.floor(data.length / win);
@@ -87,7 +95,8 @@ await new Promise((resolve, reject) => {
   });
 });
 
-const browser = await chromium.launch({ args: ['--autoplay-policy=no-user-gesture-required'] });
+// 実機と同じ既定の自動再生ポリシーで動かす (音声の有効化処理も検査するため)
+const browser = await chromium.launch();
 const context = await browser.newContext({
   viewport: { width: 390, height: 844 },
   deviceScaleFactor: 1,
@@ -132,10 +141,16 @@ try {
   await shot('01-home');
 
   console.log('Koch レッスン 1 (解読した文字を入力して合格する)');
-  await page.click('text=レッスン 1 を始める');
+  // 最初の操作はタッチ (タッチの pointerdown はユーザー操作に数えられないので、その対策を検査する)
+  await page.tap('text=レッスン 1 を始める');
   await page.waitForSelector('text=新しい文字の音を聞く');
   await shot('02-koch-intro');
-  await page.click('text=練習を始める');
+  await page.tap('text=練習を始める');
+  const ctxState = await page
+    .waitForFunction(() => window.__ctxs[0]?.state === 'running', null, { timeout: 5000 })
+    .then(() => 'running')
+    .catch(() => page.evaluate(() => window.__ctxs[0]?.state ?? 'none'));
+  check(ctxState === 'running', `タップ操作で AudioContext が有効になる (${ctxState})`);
   let decodedCount = await page.evaluate(() => window.__decoded.length);
   for (let g = 0; g < 5; g++) {
     const text = await waitDecoded(decodedCount + 1);

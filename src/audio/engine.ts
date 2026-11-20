@@ -62,17 +62,24 @@ export class MorseAudio {
   private playing = false;
   private noiseCache = new Map<string, AudioBuffer>();
 
-  /** ユーザー操作 (タップ) の中で呼ぶ。自動再生の制限を解除する。 */
-  unlock(): void {
+  /**
+   * ユーザー操作 (タップ) の中で呼ぶ。自動再生の制限を解除する。
+   * 有効になったら true。タッチの pointerdown はブラウザの「ユーザー操作」に数えられないため、
+   * 呼び出し側は pointerup / click でも true になるまで呼び続ける。
+   */
+  unlock(): boolean {
     const ctx = this.ensure();
-    if (!ctx) return;
-    if (ctx.state === 'suspended') void ctx.resume();
-    // 無音を 1 サンプル鳴らしておく (一部のブラウザでの解除のため)
-    const b = ctx.createBuffer(1, 1, ctx.sampleRate);
-    const s = ctx.createBufferSource();
-    s.buffer = b;
-    s.connect(ctx.destination);
-    s.start();
+    if (!ctx) return true; // Web Audio が使えない環境では諦める
+    if (ctx.state !== 'running') {
+      void ctx.resume().catch(() => undefined);
+      // 無音を 1 サンプル鳴らしておく (一部のブラウザでの解除のため)
+      const b = ctx.createBuffer(1, 1, ctx.sampleRate);
+      const s = ctx.createBufferSource();
+      s.buffer = b;
+      s.connect(ctx.destination);
+      s.start();
+    }
+    return ctx.state === 'running';
   }
 
   get isPlaying(): boolean {
@@ -196,6 +203,8 @@ export class MorseAudio {
     const data = renderBandNoise(ctx.sampleRate, 6, toneHz, 550, createRng(12345));
     const buf = ctx.createBuffer(1, data.length, ctx.sampleRate);
     buf.getChannelData(0).set(data);
+    // 音の高さを何度も変えたときにメモリを使いすぎないよう、直近の数個だけ残す
+    if (this.noiseCache.size >= 3) this.noiseCache.delete(this.noiseCache.keys().next().value!);
     this.noiseCache.set(key, buf);
     return buf;
   }
