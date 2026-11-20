@@ -71,7 +71,7 @@ npm ci
 npm run dev        # 開発サーバー
 npm test           # ユニットテスト (Vitest)
 npm run build      # 型チェック + 本番ビルド (dist/)
-BASE_PATH=/study_morse/ npm run build && npm run e2e   # スマホ幅の Chromium で操作テスト (Playwright が必要)
+BASE_PATH=/study_morse/ npm run build && npm run e2e   # スマホ幅の Chromium で操作テスト (Playwright が必要。Node.js 22.23 で確認)
 npm run icons      # アイコン PNG の再生成
 ```
 

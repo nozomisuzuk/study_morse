@@ -17,6 +17,8 @@ const SHOTS = shotsIdx > 0 ? process.argv[shotsIdx + 1] : null;
 if (SHOTS) mkdirSync(SHOTS, { recursive: true });
 
 const DARK = process.argv.includes('--dark');
+const scaleIdx = process.argv.indexOf('--scale');
+const SCALE = scaleIdx > 0 ? Number(process.argv[scaleIdx + 1]) : 1;
 const WPM = 30;
 const REVERSE = Object.fromEntries(Object.entries(MORSE).map(([k, v]) => [v, k]));
 
@@ -99,7 +101,7 @@ await new Promise((resolve, reject) => {
 const browser = await chromium.launch();
 const context = await browser.newContext({
   viewport: { width: 390, height: 844 },
-  deviceScaleFactor: 1,
+  deviceScaleFactor: SCALE,
   isMobile: true,
   hasTouch: true,
   locale: 'ja-JP',
