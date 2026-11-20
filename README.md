@@ -51,7 +51,7 @@ GitHub の無料プランでは、GitHub Pages は public リポジトリでし�
 ## しくみのメモ
 
 - **速度 (PARIS 方式)**: 1 単位 = 1.2 / WPM 秒。短点 1、長点 3、符号内の間隔 1、文字間 3、語間 7 単位
-- **実効速度 (Farnsworth)**: 符号部分 (PARIS の 31 単位) は文字速度のまま、残り 19 単位を引き伸ばして 1 語が 60 / 実効WPM 秒になるようにしています。Farnsworth 単位 `fu = (60/s − 31 × 1.2/c) / 19`、文字間 `3fu`、語間 `7fu` (c: 文字速度, s: 実効速度)。ARRL の Farnsworth 規格 (J. Bloom, KE3Z) の式 `ta = (60c − 37.2s)/(sc)`, `tc = 3ta/19`, `tw = 7ta/19` と一致することを sympy で確認済み。テスト (`tests/timing.test.ts`) でも PARIS が 60/s 秒になることを確かめています
+- **実効速度 (Farnsworth)**: 符号部分 (PARIS の 31 単位) は文字速度のまま、残り 19 単位を引き伸ばして 1 語が 60 / 実効WPM 秒になるようにしています。Farnsworth 単位 `fu = (60/s − 31 × 1.2/c) / 19`、文字間 `3fu`、語間 `7fu` (c: 文字速度, s: 実効速度)。ARRL の Farnsworth 規格 (J. Bloom, KE3Z) の式 `ta = (60c − 37.2s)/(sc)`, `tc = 3ta/19`, `tw = 7ta/19` と一致することを sympy で確認済み (ARRL の原典は直接開けなかったため、式の形は「Bloom の式と同じ結果になる」と明記している morsecode.world の解説で照合)。テスト (`tests/timing.test.ts`) でも PARIS が 60/s 秒になることを確かめています
 - **音**: Web Audio API。サンプルを JavaScript で直接合成し、キーイングの立ち上がり・立ち下がりを raised-cosine で整形してクリック音を抑えています (初期値 5 ms)
 - **ノイズ**: 白色雑音に中心周波数 = 音の高さ、帯域約 550 Hz のバンドパスを 2 段かけた「CW フィルタを通したバンドノイズ」
 - **採点**: 送信文と入力を Levenshtein 距離で整列し、正答率 = (文字数 − 誤り数) / 文字数
