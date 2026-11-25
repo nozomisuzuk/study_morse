@@ -18,7 +18,7 @@ export interface Settings {
   groupLen: number;
   /** Koch: 1 回の練習のグループ数 */
   groupsPerSession: number;
-  /** Koch: 1 グループずつ答える / まとめて聞く */
+  /** Koch: まとめて聞く (合格判定あり) / 1 グループずつ答える (確認用) */
   kochMode: 'group' | 'stream';
   /** 答え合わせのあと自動で次へ進む */
   autoAdvance: boolean;
@@ -49,7 +49,7 @@ export const DEFAULT_SETTINGS: Settings = {
   riseMs: 5,
   groupLen: 5,
   groupsPerSession: 20,
-  kochMode: 'group',
+  kochMode: 'stream',
   autoAdvance: true,
   showCodes: false,
   conditionsPreset: 'normal',
@@ -63,6 +63,8 @@ export const DEFAULT_SETTINGS: Settings = {
 
 export interface KochRecord {
   date: string;
+  /** 'group' は確認用 (合格判定なし)。古い記録には無い */
+  mode?: 'group' | 'stream';
   lesson: number;
   accuracy: number;
   chars: number;

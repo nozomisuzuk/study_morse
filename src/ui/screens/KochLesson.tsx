@@ -18,10 +18,20 @@ import { navigate, route } from '../router';
 
 type Phase = 'intro' | 'run' | 'result';
 
+/**
+ * 「1 グループずつ」の入力締め切り: グループの最後の音が終わってからの猶予 [ms]。
+ * 無制限にすると、耳に残った音を後から思い出して変換できてしまい、Koch 法がねらう
+ * 「考える暇がない速さで音のまとまりとして聞く」練習にならないため。
+ * (最後の 1〜2 文字をスマホで打つ時間だけ残している)
+ */
+const GRACE_MS = 1500;
+
 interface Summary {
   accuracy: number;
   total: number;
   correct: number;
+  /** 合格判定をした (まとめて聞く) か */
+  judged: boolean;
   passed: boolean;
   unlocked: boolean;
   perChar: { ch: string; ok: number; n: number }[];
@@ -44,23 +54,51 @@ export function KochLesson() {
   const [results, setResults] = useState<ScoreResult[]>([]);
   const [summary, setSummary] = useState<Summary | null>(null);
   const [streamDone, setStreamDone] = useState(false);
+  /** 答え合わせ後に聞き直したので自動で次へ進まない */
+  const [holdNext, setHoldNext] = useState(false);
   const timer = useRef<number | undefined>(undefined);
+  const deadline = useRef<number | undefined>(undefined);
+  /** グループごとの世代番号。古いグループの締め切りタイマーを無視するために使う */
+  const gen = useRef(0);
+  const inputRef = useRef<string[]>([]);
+  inputRef.current = input;
+  const checkRef = useRef<(typed: string[]) => void>(() => undefined);
   const mode = s.kochMode;
+
+  const clearTimers = () => {
+    clearTimeout(timer.current);
+    clearTimeout(deadline.current);
+  };
 
   useSessionGuards(phase === 'run');
   usePracticeTimer(phase === 'run');
-  useEffect(() => () => clearTimeout(timer.current), []);
+  useEffect(() => clearTimers, []);
   // レッスンが変わったら最初の画面に戻す
   useEffect(() => {
     audio.stop();
-    clearTimeout(timer.current);
+    clearTimers();
     setPhase('intro');
   }, [lesson]);
 
   const conditions = activeConditions('koch');
 
-  const playGroup = (g: string[]) => {
-    void audio.play([{ text: g.join(''), timing: timingOf() }], { tone: toneOf(), conditions });
+  /** グループを再生する。withDeadline なら、音が終わって GRACE_MS 後にその時点の入力で採点する */
+  const playGroup = (g: string[], withDeadline = false) => {
+    clearTimeout(deadline.current);
+    const myGen = ++gen.current;
+    void audio.play([{ text: g.join(''), timing: timingOf() }], {
+      tone: toneOf(),
+      conditions,
+      onSchedule: withDeadline
+        ? (_i, perfStart, tl) => {
+            const lastEnd = tl.marks[tl.marks.length - 1]?.end ?? tl.duration;
+            const due = perfStart + lastEnd * 1000 + GRACE_MS;
+            deadline.current = window.setTimeout(() => {
+              if (gen.current === myGen) checkRef.current(inputRef.current);
+            }, Math.max(0, due - performance.now()));
+          }
+        : undefined,
+    });
   };
 
   const start = () => {
@@ -74,9 +112,10 @@ export function KochLesson() {
     setResults([]);
     setSummary(null);
     setStreamDone(false);
+    setHoldNext(false);
     setPhase('run');
     if (mode === 'group') {
-      timer.current = window.setTimeout(() => playGroup(gs[0]), 350);
+      timer.current = window.setTimeout(() => playGroup(gs[0], true), 350);
     } else {
       const sp = spacing(timingOf());
       const gap = Math.max(0, sp.wordGap - 0.15); // 各送信の前後に入る余白 (0.05+0.1 秒) を差し引く
@@ -92,6 +131,7 @@ export function KochLesson() {
 
   const finish = (all: ScoreResult[]) => {
     audio.stop();
+    clearTimers();
     let total = 0;
     let correct = 0;
     let errors = 0;
@@ -112,20 +152,23 @@ export function KochLesson() {
       if (op.type === 'sub') conf.set(`${op.ref}\u0000${op.hyp}`, (conf.get(`${op.ref}\u0000${op.hyp}`) ?? 0) + 1);
     }
     const accuracy = total > 0 ? Math.max(0, total - errors) / total : 0;
-    const passed = accuracy >= PASS_ACCURACY && total >= 25;
+    // 合格判定は「まとめて聞く」だけ。1 グループずつは区切りごとに考える時間があるので確認用
+    const judged = mode === 'stream';
+    const passed = judged && accuracy >= PASS_ACCURACY && total >= 25;
     const unlocked = passed && lesson === progress.value.kochLesson && lesson < MAX_LESSON;
     updateProgress((p) => ({
       ...p,
       kochLesson: unlocked ? lesson + 1 : p.kochLesson,
       kochHistory: [
         ...p.kochHistory,
-        { date: new Date().toISOString(), lesson, accuracy, chars: total, charWpm: settings.value.charWpm, effWpm: settings.value.effWpm },
+        { date: new Date().toISOString(), mode, lesson, accuracy, chars: total, charWpm: settings.value.charWpm, effWpm: settings.value.effWpm },
       ].slice(-300),
     }));
     setSummary({
       accuracy,
       total,
       correct,
+      judged,
       passed,
       unlocked,
       perChar: chars.filter((c) => per.has(c)).map((c) => ({ ch: c, ...per.get(c)! })),
@@ -141,7 +184,7 @@ export function KochLesson() {
   };
 
   const next = (all: ScoreResult[]) => {
-    clearTimeout(timer.current);
+    clearTimers();
     const n = idx + 1;
     if (n >= groups.length) {
       finish(all);
@@ -150,11 +193,14 @@ export function KochLesson() {
     setIdx(n);
     setInput([]);
     setChecked(null);
-    timer.current = window.setTimeout(() => playGroup(groups[n]), 250);
+    setHoldNext(false);
+    timer.current = window.setTimeout(() => playGroup(groups[n], true), 250);
   };
 
   const check = (typed: string[]) => {
-    if (checked || mode !== 'group') return;
+    if (checked || mode !== 'group' || phase !== 'run') return;
+    clearTimeout(deadline.current);
+    gen.current++;
     const r = score(groups[idx], typed);
     const all = [...results, r];
     setChecked(r);
@@ -164,6 +210,15 @@ export function KochLesson() {
     if (settings.value.autoAdvance) {
       timer.current = window.setTimeout(() => next(all), r.errors === 0 ? 650 : 1700);
     }
+  };
+
+  checkRef.current = check;
+
+  /** 答え合わせのあとに正解の音を聞き直す (自動で次へ進むのは止める) */
+  const replayAfterCheck = () => {
+    clearTimeout(timer.current);
+    setHoldNext(true);
+    playGroup(groups[idx]);
   };
 
   const scoreStream = () => {
@@ -257,15 +312,15 @@ export function KochLesson() {
             <Segmented
               value={mode}
               options={[
-                { value: 'group', label: '1 グループずつ答える' },
                 { value: 'stream', label: 'まとめて聞く' },
+                { value: 'group', label: '1 グループずつ (確認用)' },
               ]}
               onChange={(v) => updateSettings({ kochMode: v })}
             />
             <p class="muted small" style={{ margin: '6px 0 0' }}>
-              {mode === 'group'
-                ? `${s.groupLen} 文字のグループを ${s.groupsPerSession} 回。1 グループごとに答え合わせします。`
-                : `${s.groupsPerSession} グループを続けて流します。聞きながら入力し、最後にまとめて採点します (実際の受信に近い形式)。`}
+              {mode === 'stream'
+                ? `${s.groupsPerSession} グループ (${s.groupLen * s.groupsPerSession} 文字) を止めずに流します。聞きながら入力し、最後にまとめて採点します。分からない文字は飛ばして次へ。合格判定はこの形式で行います。`
+                : `${s.groupLen} 文字ごとに答え合わせします。入力は音が終わってから ${GRACE_MS / 1000} 秒で締め切り、答える前の聞き直しはできません。聞き間違いを確かめる確認用で、合格判定はしません。`}
             </p>
             <SpeedControl />
           </div>
@@ -273,7 +328,7 @@ export function KochLesson() {
         <button class="btn primary block big" onClick={start}>
           練習を始める
         </button>
-        <p class="muted small center">正答率 {percent(PASS_ACCURACY)} 以上で次の文字が追加されます。</p>
+        <p class="muted small center">「まとめて聞く」で正答率 {percent(PASS_ACCURACY)} 以上なら次の文字が追加されます。</p>
       </div>
     );
   }
@@ -289,7 +344,9 @@ export function KochLesson() {
             {summary.correct} / {summary.total} 文字
           </p>
           <div class="notice" style={{ marginTop: '12px' }}>
-            {summary.passed
+            {!summary.judged
+              ? '「1 グループずつ」は確認用なので合格判定はしていません。次のレッスンへは「まとめて聞く」で 90% 以上を取ると進めます。'
+              : summary.passed
               ? summary.unlocked
                 ? `合格です！ レッスン ${lesson + 1} (新しい文字が 1 つ増えます) に進めるようになりました。`
                 : hasNext
@@ -336,12 +393,23 @@ export function KochLesson() {
           </Card>
         )}
         <div class="stack">
+          {!summary.judged && (
+            <button
+              class="btn primary block big"
+              onClick={() => {
+                updateSettings({ kochMode: 'stream' });
+                setPhase('intro');
+              }}
+            >
+              「まとめて聞く」で合格判定に挑戦
+            </button>
+          )}
           {summary.unlocked && (
             <button class="btn primary block big" onClick={() => navigate(`/koch?lesson=${lesson + 1}`)}>
               レッスン {lesson + 1} へ進む
             </button>
           )}
-          <button class={`btn block big ${summary.unlocked ? '' : 'primary'}`} onClick={start}>
+          <button class={`btn block big ${summary.unlocked || !summary.judged ? '' : 'primary'}`} onClick={start}>
             もう一度このレッスン
           </button>
           <button class="btn block ghost" onClick={() => navigate('/')}>
@@ -363,6 +431,7 @@ export function KochLesson() {
         title={`レッスン ${lesson}`}
         back={() => {
           audio.stop();
+          clearTimers();
           setPhase('intro');
         }}
       />
@@ -381,25 +450,30 @@ export function KochLesson() {
             {checked ? (
               <DiffView ops={checked.ops} />
             ) : (
-              <div class="slots">
-                {Array.from({ length: s.groupLen }, (_, i) => (
-                  <div key={i} class={`slot ${i === input.length ? 'cur' : ''}`}>
-                    {input[i] ? <Tok t={input[i]} /> : ''}
-                  </div>
-                ))}
-              </div>
+              <>
+                <div class="slots">
+                  {Array.from({ length: s.groupLen }, (_, i) => (
+                    <div key={i} class={`slot ${i === input.length ? 'cur' : ''}`}>
+                      {input[i] ? <Tok t={input[i]} /> : ''}
+                    </div>
+                  ))}
+                </div>
+                <span class="muted small">音が終わって {GRACE_MS / 1000} 秒で締め切り</span>
+              </>
             )}
           </div>
           <div class="btn-row">
-            <button class="btn" onClick={() => playGroup(groups[idx])}>
-              ↻ もう一度聞く
-            </button>
             {checked ? (
-              !settings.value.autoAdvance && (
-                <button class="btn primary" onClick={() => next(results)}>
-                  次へ
+              <>
+                <button class="btn" onClick={replayAfterCheck}>
+                  ↻ 正解を聞き直す
                 </button>
-              )
+                {(!settings.value.autoAdvance || holdNext) && (
+                  <button class="btn primary" onClick={() => next(results)}>
+                    次へ
+                  </button>
+                )}
+              </>
             ) : (
               <button class="btn" onClick={() => check(input)}>
                 わからない／採点

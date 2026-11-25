@@ -11,7 +11,7 @@ export function Home() {
   const newChars = newCharsOf(lesson);
   const todayMin = Math.round((p.practiceLog[today()] ?? 0) / 60);
   const streak = streakDays(p.practiceLog);
-  const lastForLesson = [...p.kochHistory].reverse().find((h) => h.lesson === lesson);
+  const lastForLesson = [...p.kochHistory].reverse().find((h) => h.lesson === lesson && h.mode !== 'group');
   const done = lesson >= MAX_LESSON && p.kochHistory.some((h) => h.lesson === MAX_LESSON && h.accuracy >= 0.9);
   const firstTime = p.kochHistory.length === 0;
 
