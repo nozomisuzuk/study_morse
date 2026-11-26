@@ -142,10 +142,11 @@ try {
   check(await page.isVisible('text=レッスン 1 を始める'), 'レッスン 1 のボタンが出る');
   await shot('01-home');
 
-  console.log('Koch レッスン 1 (解読した文字を入力して合格する)');
+  console.log('Koch レッスン 1: まとめて聞く (既定) で合格してレッスン 2 を解放');
   // 最初の操作はタッチ (タッチの pointerdown はユーザー操作に数えられないので、その対策を検査する)
   await page.tap('text=レッスン 1 を始める');
   await page.waitForSelector('text=新しい文字の音を聞く');
+  check(await page.isVisible('.segmented button.on:has-text("まとめて聞く")'), '既定は「まとめて聞く」');
   await shot('02-koch-intro');
   await page.tap('text=練習を始める');
   const ctxState = await page
@@ -154,14 +155,13 @@ try {
     .catch(() => page.evaluate(() => window.__ctxs[0]?.state ?? 'none'));
   check(ctxState === 'running', `タップ操作で AudioContext が有効になる (${ctxState})`);
   let decodedCount = await page.evaluate(() => window.__decoded.length);
-  for (let g = 0; g < 5; g++) {
-    const text = await waitDecoded(decodedCount + 1);
-    decodedCount++;
-    check(/^[KM]{5}$/.test(text), `グループ ${g + 1} を解読: ${text}`);
-    await typeText(text);
-    if (g === 0) await shot('03-koch-check');
-    await page.waitForTimeout(150);
-  }
+  await page.waitForFunction((k) => window.__decoded.length >= k + 5, decodedCount, { timeout: 30000 });
+  const streamTexts = await page.evaluate((k) => window.__decoded.slice(k, k + 5), decodedCount);
+  decodedCount += 5;
+  check(streamTexts.every((t) => /^[KM]{5}$/.test(t)), `5 グループを解読: ${streamTexts.join(' ')}`);
+  for (const t of streamTexts) await typeText(t);
+  await shot('03-koch-stream');
+  await page.click('text=採点する');
   await page.waitForSelector('text=レッスン 1 の結果', { timeout: 15000 });
   check(await page.isVisible('.result-big:has-text("100%")'), '結果が 100%');
   check(await page.isVisible('text=レッスン 2 へ進む'), 'レッスン 2 が解放される');
@@ -169,19 +169,38 @@ try {
   const lesson = await page.evaluate(() => JSON.parse(localStorage.getItem('study-morse:progress:v1')).kochLesson);
   check(lesson === 2, `保存された進捗 kochLesson=${lesson}`);
 
-  console.log('Koch まとめて聞くモード');
+  console.log('Koch レッスン 2: 1 グループずつ (確認用)');
   await page.click('text=レッスン 2 へ進む');
-  await page.click('text=まとめて聞く');
+  await page.click('text=1 グループずつ (確認用)');
   await page.click('text=練習を始める');
-  const before = decodedCount;
-  await page.waitForFunction((k) => window.__decoded.length >= k + 5, before, { timeout: 30000 });
-  const streamTexts = await page.evaluate((k) => window.__decoded.slice(k, k + 5), before);
-  decodedCount += 5;
-  check(streamTexts.every((t) => /^[KMU]{5}$/.test(t)), `5 グループを解読: ${streamTexts.join(' ')}`);
-  for (const t of streamTexts) await typeText(t);
-  await page.click('text=採点する');
-  await page.waitForSelector('text=レッスン 2 の結果');
-  check(await page.isVisible('.result-big:has-text("100%")'), 'まとめて採点で 100%');
+  for (let g = 0; g < 5; g++) {
+    const text = await waitDecoded(decodedCount + 1);
+    decodedCount++;
+    if (g === 0) {
+      check(!(await page.isVisible('text=正解を聞き直す')) && !(await page.isVisible('text=もう一度聞く')), '答える前は聞き直せない');
+    }
+    if (g === 1) {
+      // 何も入力しないと、音が終わって 1.5 秒で締め切られて自動採点される
+      await page.waitForSelector('.diff', { timeout: 10000 });
+      const missed = await page.locator('.diff .cell.del').count();
+      check(missed === 5, `入力しないと締め切りで自動採点 (聞き逃し ${missed} 文字): ${text}`);
+      check(await page.isVisible('text=正解を聞き直す'), '採点後は正解を聞き直せる');
+      await shot('03-koch-group-deadline');
+      await page.waitForSelector('.diff', { state: 'detached', timeout: 10000 });
+      continue;
+    }
+    check(/^[KMU]{5}$/.test(text), `グループ ${g + 1} を解読: ${text}`);
+    await typeText(text);
+    await page.waitForSelector('.diff', { timeout: 5000 });
+    check((await page.locator('.diff .cell.match').count()) === 5, `グループ ${g + 1} が全問正解`);
+    if (g < 4) await page.waitForSelector('.diff', { state: 'detached', timeout: 10000 });
+  }
+  await page.waitForSelector('text=レッスン 2 の結果', { timeout: 15000 });
+  check(await page.isVisible('.result-big:has-text("80%")'), '確認用の結果は 80% (1 グループ聞き逃し)');
+  check(await page.isVisible('text=合格判定はしていません'), '確認用モードでは合格判定しない');
+  check(!(await page.isVisible('text=レッスン 3 へ進む')), 'レッスン 3 は解放されない');
+  const lesson2 = await page.evaluate(() => JSON.parse(localStorage.getItem('study-morse:progress:v1')).kochLesson);
+  check(lesson2 === 2, `進捗はレッスン 2 のまま (kochLesson=${lesson2})`);
   await page.click('text=ホームに戻る');
 
   console.log('瞬時認識ドリル');

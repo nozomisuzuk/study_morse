@@ -100,7 +100,10 @@ export function Stats() {
           recent.map((h, i) => (
             <div key={i} class="row small" style={{ padding: '5px 0', borderBottom: '1px solid var(--border)' }}>
               <span style={{ minWidth: '5.5em' }}>{new Date(h.date).toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric' })}</span>
-              <span style={{ minWidth: '5em' }}>レッスン {h.lesson}</span>
+              <span style={{ minWidth: '5em' }}>
+                レッスン {h.lesson}
+                {h.mode === 'group' && <span class="muted"> (確認用)</span>}
+              </span>
               <div class="spacer">
                 <ProgressBar value={h.accuracy} />
               </div>
