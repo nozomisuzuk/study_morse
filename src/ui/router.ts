@@ -21,6 +21,13 @@ if (typeof window !== 'undefined') {
   });
 }
 
+/** 練習中の画面 (タブバーを隠してキーパッドの場所を確保する) */
+export const SESSION_PATHS: ReadonlySet<string> = new Set(['/koch', '/icr', '/words', '/calls', '/qso']);
+
+export function inSession(): boolean {
+  return SESSION_PATHS.has(route.value.path);
+}
+
 export function navigate(path: string): void {
   if (location.hash === `#${path}`) return;
   location.hash = path;

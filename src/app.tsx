@@ -1,7 +1,8 @@
 import { useEffect } from 'preact/hooks';
 import type { JSX } from 'preact';
 import { settings } from './state/store';
-import { navigate, route } from './ui/router';
+import { SESSION_PATHS, navigate, route } from './ui/router';
+import { applyPendingReload, justUpdated } from './pwa';
 import { Home } from './ui/screens/Home';
 import { Practice } from './ui/screens/Practice';
 import { KochLesson } from './ui/screens/KochLesson';
@@ -28,8 +29,6 @@ const SCREENS: Record<string, () => JSX.Element | null> = {
   '/settings': Settings,
 };
 
-/** 練習中はタブバーを隠してキーパッドの場所を確保する */
-const FULLSCREEN = new Set(['/koch', '/icr', '/words', '/calls', '/qso']);
 
 const TABS: { path: string; label: string; icon: JSX.Element; match: string[] }[] = [
   {
@@ -93,6 +92,17 @@ export function App() {
   const { path } = route.value;
   const theme = settings.value.theme;
 
+  // 練習の途中に新しい版が届いていたら、練習画面を出たところで切り替える
+  useEffect(() => {
+    if (!SESSION_PATHS.has(path)) applyPendingReload();
+  }, [path]);
+
+  useEffect(() => {
+    if (!justUpdated.value) return;
+    const t = setTimeout(() => (justUpdated.value = false), 5000);
+    return () => clearTimeout(t);
+  }, []);
+
   useEffect(() => {
     const root = document.documentElement;
     if (theme === 'system') root.removeAttribute('data-theme');
@@ -100,11 +110,16 @@ export function App() {
   }, [theme]);
 
   const Screen = SCREENS[path] ?? Home;
-  const fullscreen = FULLSCREEN.has(path);
+  const fullscreen = SESSION_PATHS.has(path);
 
   return (
     <>
       <main class={`app ${fullscreen ? 'fullscreen' : ''}`}>
+        {justUpdated.value && (
+          <div class="notice update-toast" role="status" onClick={() => (justUpdated.value = false)}>
+            新しいバージョン (v{__APP_VERSION__}) に更新しました
+          </div>
+        )}
         <Screen />
       </main>
       {!fullscreen && (

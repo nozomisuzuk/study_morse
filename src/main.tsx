@@ -1,7 +1,7 @@
 import { render } from 'preact';
-import { registerSW } from 'virtual:pwa-register';
 import { App } from './app';
 import { audio } from './audio/engine';
+import { initPwa } from './pwa';
 import './styles.css';
 
 render(<App />, document.getElementById('app')!);
@@ -14,7 +14,5 @@ const unlock = () => {
 };
 for (const ev of UNLOCK_EVENTS) window.addEventListener(ev, unlock, true);
 
-// オフラインで動かすための Service Worker。新しい版があれば裏で更新し、次回起動時に反映される。
-if ('serviceWorker' in navigator && import.meta.env.PROD) {
-  registerSW({ immediate: true });
-}
+// オフラインで動かすための Service Worker と、新しい版への自動切り替え (src/pwa.ts)
+initPwa();

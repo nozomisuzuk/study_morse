@@ -13,10 +13,29 @@ import {
 } from '../../state/store';
 import { Card, Segmented, SliderField, ToggleField, TopBar } from '../components/common';
 import { timingOf, toneOf } from '../hooks';
+import { checkForUpdate } from '../../pwa';
 
 export function Settings() {
   const s = settings.value;
   const [msg, setMsg] = useState<string | null>(null);
+  const [updMsg, setUpdMsg] = useState<string | null>(null);
+  const [checking, setChecking] = useState(false);
+
+  const checkUpdate = async () => {
+    setChecking(true);
+    setUpdMsg(null);
+    const r = await checkForUpdate();
+    setChecking(false);
+    setUpdMsg(
+      r === 'found'
+        ? '新しいバージョンを見つけました。ダウンロードが終わると自動で読み込み直します。'
+        : r === 'latest'
+          ? 'これが最新版です。'
+          : r === 'offline'
+            ? 'オフラインのため確認できませんでした。'
+            : 'この環境ではアップデートの確認ができません。',
+    );
+  };
   const sp = spacing(timingOf(s));
 
   const setPreset = (p: ConditionsPreset) => {
@@ -198,7 +217,19 @@ export function Settings() {
           学習の記録をリセット
         </button>
       </Card>
-      <p class="muted small center">モールス受信トレーナー v{__APP_VERSION__}</p>
+      <div class="center" style={{ margin: '8px 0 16px' }}>
+        <p class="muted small" style={{ margin: '0 0 8px' }}>
+          モールス受信トレーナー v{__APP_VERSION__}
+        </p>
+        <button class="btn" onClick={() => void checkUpdate()} disabled={checking}>
+          {checking ? '確認中…' : 'アップデートを確認'}
+        </button>
+        {updMsg && (
+          <p class="small" role="status" style={{ margin: '8px 0 0' }}>
+            {updMsg}
+          </p>
+        )}
+      </div>
     </div>
   );
 }

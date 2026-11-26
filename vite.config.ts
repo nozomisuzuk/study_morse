@@ -11,7 +11,8 @@ const base = process.env.BASE_PATH ?? '/';
 export default defineConfig({
   base,
   define: {
-    __APP_VERSION__: JSON.stringify(pkg.version),
+    // APP_VERSION はテスト (更新の確認) 用の上書き。通常は package.json の version
+    __APP_VERSION__: JSON.stringify(process.env.APP_VERSION ?? pkg.version),
   },
   plugins: [
     preact(),
@@ -37,6 +38,11 @@ export default defineConfig({
         ],
       },
       workbox: {
+        // 新しい版を待機させずにすぐ有効にする。
+        // (プラグインは injectRegister が auto のときだけこれを自動で入れるが、
+        //  ここでは登録を src/pwa.ts で自前で行うため injectRegister: false にしており、明示が必要)
+        skipWaiting: true,
+        clientsClaim: true,
         globPatterns: ['**/*.{js,css,html,svg,png,webmanifest}'],
         navigateFallback: 'index.html',
         cleanupOutdatedCaches: true,

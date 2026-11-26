@@ -890,3 +890,14 @@ details summary {
   cursor: pointer;
   font-weight: 600;
 }
+
+.update-toast {
+  position: fixed;
+  top: calc(8px + env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  width: min(528px, calc(100% - 32px));
+  background: var(--surface);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+}

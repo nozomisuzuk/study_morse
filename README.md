@@ -26,6 +26,8 @@ PWA (Progressive Web App) として作っているので、Android の Chrome �
 2. メニュー (︙) →「アプリをインストール」または「ホーム画面に追加」
 3. ホーム画面のアイコンから起動。2 回目以降はオフラインでも動きます
 
+新しい版は、ネットにつながっているときにアプリを開いたり、バックグラウンドから戻ったりすると自動で取り込まれ、画面が一度読み込み直されて切り替わります (練習の途中なら、練習画面を出たときに切り替えます)。設定画面の一番下にある「アップデートを確認」でも確認できます。
+
 成績は端末のブラウザ内 (localStorage) に保存されます。Chrome のサイトデータを消すと消えるので、機種変更の前などは「設定 → バックアップを書き出す」で保存してください。
 
 ## 公開の手順 (最初に 1 回だけ)
@@ -72,6 +74,7 @@ npm run dev        # 開発サーバー
 npm test           # ユニットテスト (Vitest)
 npm run build      # 型チェック + 本番ビルド (dist/)
 BASE_PATH=/study_morse/ npm run build && npm run e2e   # スマホ幅の Chromium で操作テスト (Playwright が必要。Node.js 22.23 で確認)
+npm run test:update  # PWA の更新 (新しい版への切り替え) のテスト (Playwright が必要)
 npm run icons      # アイコン PNG の再生成
 ```
 

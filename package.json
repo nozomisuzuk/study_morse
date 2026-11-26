@@ -1,7 +1,7 @@
 {
   "name": "study-morse",
   "private": true,
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "アマチュア無線のためのモールス受信トレーナー (PWA)",
   "type": "module",
   "scripts": {
@@ -11,7 +11,8 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.node.json",
     "icons": "node scripts/gen-icons.mjs",
-    "e2e": "node scripts/e2e.mjs"
+    "e2e": "node scripts/e2e.mjs",
+    "test:update": "node scripts/update-test.mjs"
   },
   "dependencies": {
     "@preact/signals": "^2.11.4",
